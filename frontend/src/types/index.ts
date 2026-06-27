@@ -4,7 +4,7 @@ export type JobStatus = 'QUEUED' | 'PREPROCESSING' | 'TRANSCRIBING' | 'ANALYZING
 export type SeverityType = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
 
 export interface IssueItem {
-  id: str;
+  id: string;
   timestamp_start: number;
   timestamp_end: number;
   category: string;

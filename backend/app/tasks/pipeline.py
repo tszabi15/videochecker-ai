@@ -3,6 +3,7 @@ import json
 import shutil
 import uuid
 from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor
 from celery import chain
 from app.tasks.celery_app import celery_app
 from app.db.session import SessionLocal
@@ -186,13 +187,17 @@ def validate(self, job_id: str) -> str:
             audio_categories = ["AUDIO_QUALITY", "SPEECH_COHERENCE", "AUDIO_SYNC", "BACKGROUND_NOISE"]
             issues = report_data.get("issues", [])
 
+            critical_issues = []
             for issue in issues:
                 # 1. Whisper confirmation check
                 if issue.get("category") in audio_categories:
                     issue["whisper_confirmed"] = True
-                
-                # 2. Re-verification call for CRITICAL issues
                 if issue.get("severity") == "CRITICAL":
+                    critical_issues.append(issue)
+
+            # 2. Re-verification call for CRITICAL issues concurrently via ThreadPoolExecutor
+            def verify_single_critical_issue(issue: Dict[str, Any]):
+                try:
                     verification = gemini_service.verify_critical_issue(
                         start=issue.get("timestamp_start", 0.0),
                         end=issue.get("timestamp_end", 0.0),
@@ -202,6 +207,12 @@ def validate(self, job_id: str) -> str:
                     if not verification.get("confirmed", True):
                         issue["severity"] = "MAJOR"
                         issue["confidence"] = min(issue.get("confidence", 0.8), verification.get("confidence", 0.7))
+                except Exception as exc:
+                    print(f"[Validation Warning] Issue verification failed for issue {issue.get('id', 'unknown')}: {exc}")
+
+            if critical_issues:
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    executor.map(verify_single_critical_issue, critical_issues)
 
             with open(os.path.join(work_dir, "validated_report.json"), "w") as f:
                 json.dump(report_data, f)
