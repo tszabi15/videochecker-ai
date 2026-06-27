@@ -3,14 +3,9 @@ import json
 import time
 import uuid
 from typing import Dict, Any, Tuple, Optional
+from google import genai
 from app.config import settings, MODEL_CONFIG
 from app.schemas.report import IssueReport
-
-try:
-    import google.generativeai as genai
-    GENAI_AVAILABLE = True
-except ImportError:
-    GENAI_AVAILABLE = False
 
 SYSTEM_PROMPT = """You are a professional educational video quality auditor. Your role is to
 perform an exhaustive, frame-accurate analysis of the provided video and
@@ -104,8 +99,14 @@ Now perform the full analysis. Return only the JSON report matching the schema."
 
 class GeminiService:
     def __init__(self):
-        if GENAI_AVAILABLE and settings.GEMINI_API_KEY:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
+        if settings.GEMINI_API_KEY:
+            try:
+                self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            except Exception as e:
+                print(f"[Gemini] Failed to initialize genai.Client: {e}")
+                self.client = None
+        else:
+            self.client = None
 
     def analyze_video(
         self,
@@ -113,14 +114,14 @@ class GeminiService:
         video_metadata: Dict[str, Any],
         whisper_transcript: Dict[str, Any],
         user_prompt: str,
-        model_alias: str = "gemini-3.1-pro",
+        model_alias: str = "HEAVY_ANALYZER",
         mode: str = "realtime"
     ) -> Tuple[Dict[str, Any], int, int]:
         """
-        Uploads video to Gemini File API, executes structured JSON analysis with retries.
+        Uploads video to Gemini File API, executes structured JSON analysis with retries using GenAI Interactions API.
         Returns (parsed_json_report, input_tokens, output_tokens).
         """
-        model_info = MODEL_CONFIG.get(model_alias, MODEL_CONFIG["gemini-3.1-pro"])
+        model_info = MODEL_CONFIG.get(model_alias, MODEL_CONFIG["HEAVY_ANALYZER"])
         model_id = model_info["model_id"]
 
         prompt_text = USER_PROMPT_TEMPLATE.format(
@@ -134,18 +135,20 @@ class GeminiService:
             user_prompt=user_prompt or "Standard video quality analysis."
         )
 
-        if not (GENAI_AVAILABLE and settings.GEMINI_API_KEY):
-            print(f"[Gemini] API Key missing or library unavailable. Using mock analysis response.")
+        if not (self.client and settings.GEMINI_API_KEY):
+            print(f"[Gemini] API Key missing or client unavailable. Using mock analysis response.")
             return self._generate_mock_report(video_metadata, model_alias), 45000, 1800
+
+        full_prompt = f"{SYSTEM_PROMPT}\n\n{prompt_text}"
 
         # Upload video to Gemini File API
         gfile = None
         try:
             print(f"[Gemini] Uploading {video_path} to Gemini File API...")
-            gfile = genai.upload_file(path=video_path)
+            gfile = self.client.files.upload(file=video_path)
             while gfile.state.name == "PROCESSING":
                 time.sleep(2)
-                gfile = genai.get_file(gfile.name)
+                gfile = self.client.files.get(name=gfile.name)
             if gfile.state.name == "FAILED":
                 raise Exception("Gemini File API processing failed.")
         except Exception as e:
@@ -158,29 +161,22 @@ class GeminiService:
 
         for attempt in range(max_retries):
             try:
-                model = genai.GenerativeModel(
-                    model_name=model_id,
-                    system_instruction=SYSTEM_PROMPT
+                input_content = [gfile, full_prompt] if gfile else full_prompt
+                
+                interaction = self.client.interactions.create(
+                    model=model_id,
+                    input=input_content
                 )
+                response_text = interaction.output_text
+                parsed_json = json.loads(response_text)
                 
-                contents = [gfile, prompt_text] if gfile else [prompt_text]
+                input_tokens = getattr(getattr(interaction, "usage", None), "input_tokens", 45000)
+                output_tokens = getattr(getattr(interaction, "usage", None), "output_tokens", 1800)
                 
-                generation_config = genai.GenerationConfig(
-                    temperature=0.0,
-                    response_mime_type="application/json",
-                    response_schema=IssueReport
-                )
-                
-                response = model.generate_content(contents, generation_config=generation_config)
-                parsed_json = json.loads(response.text)
-                
-                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 45000)
-                output_tokens = getattr(response.usage_metadata, "candidates_token_count", 1800)
-                
-                # Cleanup GCS file from Gemini
+                # Cleanup file from Gemini
                 if gfile:
                     try:
-                        genai.delete_file(gfile.name)
+                        self.client.files.delete(name=gfile.name)
                     except Exception:
                         pass
                         
@@ -192,27 +188,52 @@ class GeminiService:
 
         if gfile:
             try:
-                genai.delete_file(gfile.name)
+                self.client.files.delete(name=gfile.name)
             except Exception:
                 pass
 
         print(f"[Gemini] All retries exhausted. Falling back to structured default report.")
         return self._generate_mock_report(video_metadata, model_alias), 50000, 2000
 
-    def verify_critical_issue(self, start: float, end: float, description: str, model_alias: str = "gemini-3.1-pro") -> Dict[str, Any]:
-        """Runs second Gemini verification call for CRITICAL issues."""
-        if not (GENAI_AVAILABLE and settings.GEMINI_API_KEY):
+    def verify_critical_issue(self, start: float, end: float, description: str, model_alias: str = "FAST_VERIFIER", video_path: Optional[str] = None) -> Dict[str, Any]:
+        """Runs second Gemini verification call for CRITICAL issues with video context using GenAI Interactions API."""
+        if not (self.client and settings.GEMINI_API_KEY):
             return {"confirmed": True, "confidence": 0.95, "evidence": "Verified during audit review."}
             
-        model_info = MODEL_CONFIG.get(model_alias, MODEL_CONFIG["gemini-3.1-pro"])
+        model_info = MODEL_CONFIG.get(model_alias, MODEL_CONFIG["FAST_VERIFIER"])
+        model_id = model_info["model_id"]
+        gfile = None
         try:
-            model = genai.GenerativeModel(model_name=model_info["model_id"])
-            prompt = f"Review only the segment from {start}s to {end}s. Confirm or deny this specific issue: {description}. Respond in JSON with format {{'confirmed': bool, 'confidence': float, 'evidence': string}}."
-            response = model.generate_content(prompt, generation_config={"temperature": 0.0, "response_mime_type": "application/json"})
-            return json.loads(response.text)
+            if video_path and os.path.exists(video_path):
+                try:
+                    gfile = self.client.files.upload(file=video_path)
+                    while gfile.state.name == "PROCESSING":
+                        time.sleep(2)
+                        gfile = self.client.files.get(name=gfile.name)
+                    if gfile.state.name == "FAILED":
+                        gfile = None
+                except Exception as upload_err:
+                    print(f"[Gemini] Critical verification file upload failed: {upload_err}")
+                    gfile = None
+
+            prompt = f"Review only the video segment from {start}s to {end}s. Confirm or deny this specific issue: {description}. Respond in JSON with format {{'confirmed': bool, 'confidence': float, 'evidence': string}}."
+            input_content = [gfile, prompt] if gfile else prompt
+            
+            interaction = self.client.interactions.create(
+                model=model_id,
+                input=input_content
+            )
+            response_text = interaction.output_text
+            return json.loads(response_text)
         except Exception as e:
             print(f"[Gemini] Critical verification call failed: {e}")
             return {"confirmed": True, "confidence": 0.90, "evidence": "Confirmed via fallback verification logic."}
+        finally:
+            if gfile:
+                try:
+                    self.client.files.delete(name=gfile.name)
+                except Exception:
+                    pass
 
     def _generate_mock_report(self, metadata: Dict[str, Any], model_name: str) -> Dict[str, Any]:
         duration = metadata.get("duration", 120.0)

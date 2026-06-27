@@ -41,7 +41,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env.example
+      - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/videochecker
       - REDIS_URL=redis://redis:6379/0
@@ -61,7 +61,7 @@ services:
       - ./backend:/app
       - tmp_uploads:/tmp/videochecker
     env_file:
-      - .env.example
+      - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/videochecker
       - REDIS_URL=redis://redis:6379/0

@@ -3,6 +3,24 @@ from typing import Dict, Any
 from pydantic_settings import BaseSettings
 
 MODEL_CONFIG: Dict[str, Dict[str, Any]] = {
+    "HEAVY_ANALYZER": {
+        "model_id": "gemini-3.1-pro-preview",
+        "input_price_per_m": 2.00,
+        "output_price_per_m": 12.00,
+        "input_price_per_m_long": 4.00,   # above 200K tokens
+        "output_price_per_m_long": 18.00,
+        "context_window": 2_000_000,
+        "batch_discount": 0.50,
+    },
+    "FAST_VERIFIER": {
+        "model_id": "gemini-3.5-flash",
+        "input_price_per_m": 1.50,
+        "output_price_per_m": 9.00,
+        "input_price_per_m_long": 1.50,
+        "output_price_per_m_long": 9.00,
+        "context_window": 1_000_000,
+        "batch_discount": 0.50,
+    },
     "gemini-3.1-pro": {
         "model_id": "gemini-3.1-pro-preview",
         "input_price_per_m": 2.00,
@@ -46,7 +64,7 @@ class Settings(BaseSettings):
     
     WHISPER_BACKEND: str = "api"  # "api" or "local"
     MAX_VIDEO_SIZE_MB: int = 2048
-    DEFAULT_MODEL: str = "gemini-3.1-pro"
+    DEFAULT_MODEL: str = "HEAVY_ANALYZER"
     
     TEMP_DIR: str = "/tmp/videochecker"
 

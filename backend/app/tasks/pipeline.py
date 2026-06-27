@@ -195,6 +195,12 @@ def validate(self, job_id: str) -> str:
                 if issue.get("severity") == "CRITICAL":
                     critical_issues.append(issue)
 
+            model_used = job.model_used
+            original_filename = job.original_filename
+            local_video_path = os.path.join(work_dir, f"original_{original_filename}")
+            if not os.path.exists(local_video_path):
+                local_video_path = os.path.join(work_dir, "normalized.mp4")
+
             # 2. Re-verification call for CRITICAL issues concurrently via ThreadPoolExecutor
             def verify_single_critical_issue(issue: Dict[str, Any]):
                 try:
@@ -202,7 +208,8 @@ def validate(self, job_id: str) -> str:
                         start=issue.get("timestamp_start", 0.0),
                         end=issue.get("timestamp_end", 0.0),
                         description=issue.get("description", ""),
-                        model_alias=job.model_used
+                        model_alias=model_used,
+                        video_path=local_video_path if os.path.exists(local_video_path) else None
                     )
                     if not verification.get("confirmed", True):
                         issue["severity"] = "MAJOR"
