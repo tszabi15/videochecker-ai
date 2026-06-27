@@ -63,19 +63,17 @@ class FFmpegService:
     @staticmethod
     def preprocess_video(video_path: str, output_dir: str) -> Dict[str, Any]:
         """
-        Runs FFmpeg normalization, frame extraction, and audio extraction.
+        Runs FFmpeg normalization and audio extraction.
         """
         os.makedirs(output_dir, exist_ok=True)
         
         normalized_video = os.path.join(output_dir, "normalized.mp4")
         audio_wav = os.path.join(output_dir, "audio.wav")
-        frames_dir = os.path.join(output_dir, "frames")
-        os.makedirs(frames_dir, exist_ok=True)
         
         # 1. Normalize video to max 1080p
         norm_cmd = [
             "ffmpeg", "-y", "-i", video_path,
-            "-vf", "scale='min(1920\,iw)':-2",
+            "-vf", r"scale='min(1920\,iw)':-2",
             "-c:v", "libx264", "-crf", "23", "-preset", "fast",
             "-c:a", "aac",
             normalized_video
@@ -88,14 +86,6 @@ class FFmpegService:
             audio_wav
         ]
         
-        # 3. Extract frames at 1fps
-        frame_cmd = [
-            "ffmpeg", "-y", "-i", video_path,
-            "-vf", "fps=1",
-            "-q:v", "2",
-            os.path.join(frames_dir, "frame_%04d.jpg")
-        ]
-        
         try:
             subprocess.run(norm_cmd, capture_output=True, check=False)
         except Exception as e:
@@ -106,16 +96,10 @@ class FFmpegService:
             subprocess.run(audio_cmd, capture_output=True, check=False)
         except Exception as e:
             print(f"[FFmpeg] Audio extraction warning: {e}")
-
-        try:
-            subprocess.run(frame_cmd, capture_output=True, check=False)
-        except Exception as e:
-            print(f"[FFmpeg] Frame extraction warning: {e}")
             
         return {
             "normalized_video": normalized_video if os.path.exists(normalized_video) else video_path,
-            "audio_wav": audio_wav,
-            "frames_dir": frames_dir
+            "audio_wav": audio_wav
         }
 
 ffmpeg_service = FFmpegService()

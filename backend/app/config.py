@@ -4,12 +4,12 @@ from pydantic_settings import BaseSettings
 
 MODEL_CONFIG: Dict[str, Dict[str, Any]] = {
     "HEAVY_ANALYZER": {
-        "model_id": "gemini-3.1-pro-preview",
-        "input_price_per_m": 2.00,
-        "output_price_per_m": 12.00,
-        "input_price_per_m_long": 4.00,   # above 200K tokens
-        "output_price_per_m_long": 18.00,
-        "context_window": 2_000_000,
+        "model_id": "gemini-3.5-flash",
+        "input_price_per_m": 1.50,
+        "output_price_per_m": 9.00,
+        "input_price_per_m_long": 1.50,
+        "output_price_per_m_long": 9.00,
+        "context_window": 1_000_000,
         "batch_discount": 0.50,
     },
     "FAST_VERIFIER": {
@@ -50,6 +50,8 @@ MODEL_CONFIG: Dict[str, Dict[str, Any]] = {
     },
 }
 
+import tempfile
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Video Quality Checker AI"
     API_V1_STR: str = "/api/v1"
@@ -72,6 +74,18 @@ class Settings(BaseSettings):
         env_file = ".env"
         extra = "ignore"
 
-settings = Settings()
+def _resolve_temp_dir(preferred_path: str) -> str:
+    try:
+        os.makedirs(preferred_path, exist_ok=True)
+        test_path = os.path.join(preferred_path, f".perm_test_{os.getpid()}")
+        with open(test_path, "w") as f:
+            f.write("test")
+        os.remove(test_path)
+        return preferred_path
+    except (PermissionError, OSError):
+        fallback = os.path.join(tempfile.gettempdir(), "videochecker_scratch")
+        os.makedirs(fallback, exist_ok=True)
+        return fallback
 
-os.makedirs(settings.TEMP_DIR, exist_ok=True)
+settings = Settings()
+settings.TEMP_DIR = _resolve_temp_dir(settings.TEMP_DIR)

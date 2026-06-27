@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Grant celeryuser proper ownership and read/write permissions to /app and /tmp/videochecker
-RUN mkdir -p /tmp/videochecker && chown -R celeryuser:celeryuser /app /tmp/videochecker
+RUN mkdir -p /tmp/videochecker && chmod 777 /tmp/videochecker && chown -R celeryuser:celeryuser /app /tmp/videochecker
 
 USER celeryuser
 

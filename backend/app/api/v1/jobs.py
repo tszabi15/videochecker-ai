@@ -24,8 +24,10 @@ ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
 async def create_job(
     file: UploadFile = File(...),
     prompt: Optional[str] = Form(""),
-    model: ModelEnum = Form(ModelEnum.GEMINI_3_1_PRO),
+    model: ModelEnum = Form(ModelEnum.GEMINI_3_5_FLASH),
     mode: ModeEnum = Form(ModeEnum.REALTIME),
+    video_language: Optional[str] = Form("hu"),
+    report_language: Optional[str] = Form("hu"),
     db: Session = Depends(get_db)
 ):
     # Validate extension
@@ -76,6 +78,8 @@ async def create_job(
         prompt=prompt,
         model_used=model.value,
         mode=mode.value,
+        video_language=video_language or "hu",
+        report_language=report_language or "hu",
         estimated_cost_usd=est_cost
     )
     db.add(job)
@@ -121,6 +125,8 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
         original_filename=job.original_filename,
         model_used=job.model_used,
         mode=job.mode,
+        video_language=job.video_language or "hu",
+        report_language=job.report_language or "hu",
         created_at=job.created_at,
         updated_at=job.updated_at,
         error_message=job.error_message,

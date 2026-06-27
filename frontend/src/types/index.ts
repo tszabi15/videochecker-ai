@@ -46,6 +46,8 @@ export interface JobStatusResponse {
   original_filename: string;
   model_used: string;
   mode: ModeType;
+  video_language?: string;
+  report_language?: string;
   created_at: string;
   updated_at: string;
   error_message?: string;

@@ -5,10 +5,10 @@ import { JobStatusResponse, JobStatus } from '../types';
 import { api } from '../services/api';
 
 const STAGES: { id: JobStatus; name: string; desc: string }[] = [
-  { id: 'PREPROCESSING', name: 'Stage 1: Preprocessing', desc: 'Normalizing resolution, 1fps JPEG extraction & audio separation.' },
-  { id: 'TRANSCRIBING', name: 'Stage 2: Transcribing', desc: 'Running OpenAI Whisper for word-level timestamp alignment.' },
-  { id: 'ANALYZING', name: 'Stage 3: AI Analysis', desc: 'Gemini 3.1 Pro multimodal checklist audit & frame inspection.' },
-  { id: 'DONE', name: 'Stage 4 & 5: Validation & Finalize', desc: 'Cross-validating issues with audio transcript & generating scorecards.' },
+  { id: 'PREPROCESSING', name: 'Stage 1: Preprocessing', desc: 'Normalizing video resolution & audio extraction.' },
+  { id: 'TRANSCRIBING', name: 'Stage 2: Transcribing', desc: 'Processing audio track & extracting word timestamps.' },
+  { id: 'ANALYZING', name: 'Stage 3: AI Analysis', desc: 'Multimodal AI checklist audit & technical inspection.' },
+  { id: 'DONE', name: 'Stage 4 & 5: Validation & Finalize', desc: 'Validating issue telemetry & generating scorecards.' },
 ];
 
 export const JobStatusPage: React.FC = () => {

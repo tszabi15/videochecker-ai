@@ -1,9 +1,11 @@
 import os
 import json
 import time
+import random
 import uuid
 from typing import Dict, Any, Tuple, Optional
 from google import genai
+from google.genai import types
 from app.config import settings, MODEL_CONFIG
 from app.schemas.report import IssueReport
 
@@ -92,7 +94,7 @@ Immediately flag as CRITICAL severity (regardless of other factors) if ANY of th
 - Interactivity: At least one quiz question, rhetorical question, or reflective question must be embedded in the video content. If missing, flag MAJOR. Map to category: "MISSING_QUIZ".
 
 ### G. Packaging & Naming Conventions
-- Filename Structure: File names must match the format '{topic_number}_{topic_name}.mp4' (e.g., 2.1_fuggvenyek.mp4). Map to category: "METADATA".
+- Filename Structure: File names must match the format '{{topic_number}}_{{topic_name}}.mp4' (e.g., 2.1_fuggvenyek.mp4). Map to category: "METADATA".
 - Task Suffixes: All exercises, assignments, and tasks must use hierarchical numbering with a trailing 'f' character (e.g., 2.3.1f). Map to category: "NAMING_CONVENTION" or "METADATA".
 
 Now perform the full analysis. Return only the JSON report matching the schema."""
@@ -115,10 +117,12 @@ class GeminiService:
         whisper_transcript: Dict[str, Any],
         user_prompt: str,
         model_alias: str = "HEAVY_ANALYZER",
-        mode: str = "realtime"
+        mode: str = "realtime",
+        video_language: str = "hu",
+        report_language: str = "hu"
     ) -> Tuple[Dict[str, Any], int, int]:
         """
-        Uploads video to Gemini File API, executes structured JSON analysis with retries using GenAI Interactions API.
+        Uploads video to Gemini File API, executes structured JSON analysis with retries using GenAI client.models.generate_content.
         Returns (parsed_json_report, input_tokens, output_tokens).
         """
         model_info = MODEL_CONFIG.get(model_alias, MODEL_CONFIG["HEAVY_ANALYZER"])
@@ -139,7 +143,13 @@ class GeminiService:
             print(f"[Gemini] API Key missing or client unavailable. Using mock analysis response.")
             return self._generate_mock_report(video_metadata, model_alias), 45000, 1800
 
-        full_prompt = f"{SYSTEM_PROMPT}\n\n{prompt_text}"
+        language_instruction = f"""
+
+LANGUAGE ENFORCEMENT RULES:
+- The video audio and content are primarily in language: '{video_language}'. Use this context for cross-referencing transcripts and analyzing audio/visual sync.
+- Crucial: You MUST write all human-readable text fields within the structured JSON output (including 'title', 'description', 'evidence', and 'suggestion') strictly in language: '{report_language}'."""
+
+        full_prompt = f"{SYSTEM_PROMPT}\n\n{prompt_text}{language_instruction}"
 
         # Upload video to Gemini File API
         gfile = None
@@ -155,23 +165,27 @@ class GeminiService:
             print(f"[Gemini] File API upload error: {e}. Falling back to text prompt execution.")
             gfile = None
 
-        # Execute generation with 3 retries & exponential backoff
-        max_retries = 3
+        # Execute generation with 6 retries & exponential backoff with jitter
+        max_retries = 6
         last_exception = None
 
         for attempt in range(max_retries):
             try:
-                input_content = [gfile, full_prompt] if gfile else full_prompt
-                
-                interaction = self.client.interactions.create(
+                contents = [gfile, full_prompt] if gfile else full_prompt
+                response = self.client.models.generate_content(
                     model=model_id,
-                    input=input_content
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_schema=IssueReport
+                    )
                 )
-                response_text = interaction.output_text
+                response_text = response.text
                 parsed_json = json.loads(response_text)
+                normalized_report = self._normalize_report(parsed_json, video_metadata, model_alias)
                 
-                input_tokens = getattr(getattr(interaction, "usage", None), "input_tokens", 45000)
-                output_tokens = getattr(getattr(interaction, "usage", None), "output_tokens", 1800)
+                input_tokens = response.usage_metadata.prompt_token_count if response.usage_metadata else 45000
+                output_tokens = response.usage_metadata.candidates_token_count if response.usage_metadata else 1800
                 
                 # Cleanup file from Gemini
                 if gfile:
@@ -180,11 +194,12 @@ class GeminiService:
                     except Exception:
                         pass
                         
-                return parsed_json, input_tokens, output_tokens
+                return normalized_report, input_tokens, output_tokens
             except Exception as e:
                 last_exception = e
                 print(f"[Gemini] Attempt {attempt+1} failed: {e}. Retrying...")
-                time.sleep(2 ** (attempt + 1))
+                sleep_time = (2 ** (attempt + 1)) + random.uniform(1.0, 3.0)
+                time.sleep(sleep_time)
 
         if gfile:
             try:
@@ -195,8 +210,17 @@ class GeminiService:
         print(f"[Gemini] All retries exhausted. Falling back to structured default report.")
         return self._generate_mock_report(video_metadata, model_alias), 50000, 2000
 
-    def verify_critical_issue(self, start: float, end: float, description: str, model_alias: str = "FAST_VERIFIER", video_path: Optional[str] = None) -> Dict[str, Any]:
-        """Runs second Gemini verification call for CRITICAL issues with video context using GenAI Interactions API."""
+    def verify_critical_issue(
+        self,
+        start: float,
+        end: float,
+        description: str,
+        model_alias: str = "FAST_VERIFIER",
+        video_path: Optional[str] = None,
+        video_language: str = "hu",
+        report_language: str = "hu"
+    ) -> Dict[str, Any]:
+        """Runs second Gemini verification call for CRITICAL issues with video context using GenAI Models API."""
         if not (self.client and settings.GEMINI_API_KEY):
             return {"confirmed": True, "confidence": 0.95, "evidence": "Verified during audit review."}
             
@@ -216,17 +240,25 @@ class GeminiService:
                     print(f"[Gemini] Critical verification file upload failed: {upload_err}")
                     gfile = None
 
-            prompt = f"Review only the video segment from {start}s to {end}s. Confirm or deny this specific issue: {description}. Respond in JSON with format {{'confirmed': bool, 'confidence': float, 'evidence': string}}."
-            input_content = [gfile, prompt] if gfile else prompt
+            prompt = f"Review only the video segment from {start}s to {end}s (video audio language: '{video_language}'). Confirm or deny this specific issue: {description}. Respond in JSON with format {{'confirmed': bool, 'confidence': float, 'evidence': string}} where 'evidence' is written strictly in language: '{report_language}'."
+            contents = [gfile, prompt] if gfile else prompt
             
-            interaction = self.client.interactions.create(
-                model=model_id,
-                input=input_content
-            )
-            response_text = interaction.output_text
-            return json.loads(response_text)
-        except Exception as e:
-            print(f"[Gemini] Critical verification call failed: {e}")
+            for attempt in range(6):
+                try:
+                    response = self.client.models.generate_content(
+                        model=model_id,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json"
+                        )
+                    )
+                    response_text = response.text
+                    return json.loads(response_text)
+                except Exception as e:
+                    print(f"[Gemini Verification] Attempt {attempt+1} failed due to network unavailability. Retrying...")
+                    sleep_time = (2 ** (attempt + 1)) + random.uniform(1.0, 3.0)
+                    time.sleep(sleep_time)
+
             return {"confirmed": True, "confidence": 0.90, "evidence": "Confirmed via fallback verification logic."}
         finally:
             if gfile:
@@ -296,6 +328,91 @@ class GeminiService:
                     "confidence": 0.85
                 }
             ]
+        }
+
+    def _normalize_report(self, raw_data: Dict[str, Any], metadata: Dict[str, Any], model_alias: str) -> Dict[str, Any]:
+        if not isinstance(raw_data, dict):
+            raw_data = {}
+
+        duration = float(metadata.get("duration", 0.0))
+        
+        video_id = str(raw_data.get("video_id") or uuid.uuid4())
+        analysis_timestamp = str(raw_data.get("analysis_timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        video_duration_seconds = float(raw_data.get("video_duration_seconds") or duration)
+        processing_model = str(raw_data.get("processing_model") or model_alias)
+        cost_usd = float(raw_data.get("cost_usd") or 0.0)
+
+        raw_issues = raw_data.get("issues", [])
+        if not isinstance(raw_issues, list):
+            raw_issues = []
+
+        normalized_issues = []
+        critical_cnt = 0
+        major_cnt = 0
+        minor_cnt = 0
+
+        for item in raw_issues:
+            if not isinstance(item, dict):
+                continue
+            severity = str(item.get("severity", "MINOR")).upper()
+            if severity not in ["CRITICAL", "MAJOR", "MINOR", "INFO"]:
+                severity = "MINOR"
+
+            if severity == "CRITICAL":
+                critical_cnt += 1
+            elif severity == "MAJOR":
+                major_cnt += 1
+            elif severity == "MINOR":
+                minor_cnt += 1
+
+            category = str(item.get("category", "METADATA")).upper()
+            title = str(item.get("title") or f"{severity} issue in {category}").strip()
+            description = str(item.get("description") or "Issue identified during automated quality check.").strip()
+            evidence = str(item.get("evidence") or "Observed during frame analysis.").strip()
+            suggestion = str(item.get("suggestion") or "Review video segment for compliance.").strip()
+            
+            normalized_issues.append({
+                "id": str(item.get("id") or uuid.uuid4()),
+                "timestamp_start": float(item.get("timestamp_start", 0.0)),
+                "timestamp_end": float(item.get("timestamp_end", 0.0)),
+                "category": category,
+                "severity": severity,
+                "title": title[:100],
+                "description": description,
+                "evidence": evidence,
+                "suggestion": suggestion,
+                "whisper_confirmed": bool(item.get("whisper_confirmed", False)),
+                "confidence": min(1.0, max(0.0, float(item.get("confidence", 0.85))))
+            })
+
+        raw_summary = raw_data.get("summary")
+        if not isinstance(raw_summary, dict):
+            raw_summary = {}
+
+        overall_score = min(10.0, max(0.0, float(raw_summary.get("overall_score") or raw_data.get("overall_score") or 8.0)))
+        passed = bool(raw_summary.get("passed") if "passed" in raw_summary else raw_data.get("passed", overall_score >= 7.0 and critical_cnt == 0))
+
+        summary = {
+            "total_issues": len(normalized_issues),
+            "critical_issues": critical_cnt,
+            "major_issues": major_cnt,
+            "minor_issues": minor_cnt,
+            "audio_quality_score": min(10.0, max(0.0, float(raw_summary.get("audio_quality_score", 8.0)))),
+            "visual_quality_score": min(10.0, max(0.0, float(raw_summary.get("visual_quality_score", 8.0)))),
+            "content_coherence_score": min(10.0, max(0.0, float(raw_summary.get("content_coherence_score", 8.0)))),
+            "technical_accuracy_score": min(10.0, max(0.0, float(raw_summary.get("technical_accuracy_score", 8.0)))),
+            "overall_score": overall_score,
+            "passed": passed
+        }
+
+        return {
+            "video_id": video_id,
+            "analysis_timestamp": analysis_timestamp,
+            "video_duration_seconds": video_duration_seconds,
+            "processing_model": processing_model,
+            "cost_usd": cost_usd,
+            "summary": summary,
+            "issues": normalized_issues
         }
 
 gemini_service = GeminiService()

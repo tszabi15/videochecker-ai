@@ -13,6 +13,7 @@ from app.services.ffmpeg import ffmpeg_service
 from app.services.whisper import whisper_service
 from app.services.gemini import gemini_service
 from app.services.cost import calculate_gemini_cost, estimate_job_cost
+from app.config import settings
 
 def run_job_pipeline(job_id: str):
     """Triggers the sequential Celery pipeline chain."""
@@ -36,7 +37,7 @@ def preprocess(self, job_id: str) -> str:
         job.status = "PREPROCESSING"
         db.commit()
 
-        work_dir = os.path.join("/tmp/videochecker", job_id)
+        work_dir = os.path.join(settings.TEMP_DIR, job_id)
         os.makedirs(work_dir, exist_ok=True)
         
         local_video_path = os.path.join(work_dir, f"original_{job.original_filename}")
@@ -84,7 +85,7 @@ def transcribe(self, job_id: str) -> str:
         job.status = "TRANSCRIBING"
         db.commit()
 
-        work_dir = os.path.join("/tmp/videochecker", job_id)
+        work_dir = os.path.join(settings.TEMP_DIR, job_id)
         audio_wav = os.path.join(work_dir, "audio.wav")
 
         transcript = whisper_service.transcribe(audio_wav)
@@ -116,7 +117,7 @@ def analyze(self, job_id: str) -> str:
         job.status = "ANALYZING"
         db.commit()
 
-        work_dir = os.path.join("/tmp/videochecker", job_id)
+        work_dir = os.path.join(settings.TEMP_DIR, job_id)
         local_video_path = os.path.join(work_dir, f"original_{job.original_filename}")
         if not os.path.exists(local_video_path):
             local_video_path = os.path.join(work_dir, "normalized.mp4")
@@ -140,7 +141,9 @@ def analyze(self, job_id: str) -> str:
             whisper_transcript=transcript,
             user_prompt=job.prompt or "",
             model_alias=job.model_used,
-            mode=job.mode
+            mode=job.mode,
+            video_language=job.video_language or "hu",
+            report_language=job.report_language or "hu"
         )
 
         cost_usd, long_ctx = calculate_gemini_cost(
@@ -177,7 +180,7 @@ def validate(self, job_id: str) -> str:
         if not job:
             raise ValueError(f"Job {job_id} not found.")
 
-        work_dir = os.path.join("/tmp/videochecker", job_id)
+        work_dir = os.path.join(settings.TEMP_DIR, job_id)
         raw_report_path = os.path.join(work_dir, "raw_report.json")
         
         if os.path.exists(raw_report_path):
@@ -197,6 +200,8 @@ def validate(self, job_id: str) -> str:
 
             model_used = job.model_used
             original_filename = job.original_filename
+            video_lang = job.video_language or "hu"
+            report_lang = job.report_language or "hu"
             local_video_path = os.path.join(work_dir, f"original_{original_filename}")
             if not os.path.exists(local_video_path):
                 local_video_path = os.path.join(work_dir, "normalized.mp4")
@@ -209,7 +214,9 @@ def validate(self, job_id: str) -> str:
                         end=issue.get("timestamp_end", 0.0),
                         description=issue.get("description", ""),
                         model_alias=model_used,
-                        video_path=local_video_path if os.path.exists(local_video_path) else None
+                        video_path=local_video_path if os.path.exists(local_video_path) else None,
+                        video_language=video_lang,
+                        report_language=report_lang
                     )
                     if not verification.get("confirmed", True):
                         issue["severity"] = "MAJOR"
@@ -239,7 +246,7 @@ def finalize(self, job_id: str) -> str:
         if not job:
             raise ValueError(f"Job {job_id} not found.")
 
-        work_dir = os.path.join("/tmp/videochecker", job_id)
+        work_dir = os.path.join(settings.TEMP_DIR, job_id)
         val_report_path = os.path.join(work_dir, "validated_report.json")
         if not os.path.exists(val_report_path):
             val_report_path = os.path.join(work_dir, "raw_report.json")

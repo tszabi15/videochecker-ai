@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileVideo, Sparkles, Zap, DollarSign, Cpu, Clock, AlertCircle } from 'lucide-react';
+import { Upload, FileVideo, Sparkles, Zap, DollarSign, Cpu, Clock, AlertCircle, Globe } from 'lucide-react';
 import { ModelType, ModeType } from '../types';
 import { api } from '../services/api';
 
@@ -28,12 +28,22 @@ const MODEL_RATES: Record<ModelType, { name: string; badge: string; desc: string
   }
 };
 
+const LANGUAGES = [
+  { code: 'hu', label: 'Hungarian (Magyar)' },
+  { code: 'en', label: 'English' },
+  { code: 'de', label: 'German (Deutsch)' },
+  { code: 'es', label: 'Spanish (Español)' },
+  { code: 'fr', label: 'French (Français)' }
+];
+
 export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
   const [prompt, setPrompt] = useState<string>('');
-  const [model, setModel] = useState<ModelType>('gemini-3.1-pro');
+  const [model, setModel] = useState<ModelType>('gemini-3.5-flash');
   const [mode, setMode] = useState<ModeType>('realtime');
+  const [videoLanguage, setVideoLanguage] = useState<string>('hu');
+  const [reportLanguage, setReportLanguage] = useState<string>('hu');
   const [uploading, setUploading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,7 +80,7 @@ export const UploadPage: React.FC = () => {
     setError(null);
 
     try {
-      const res = await api.uploadJob(file, prompt, model, mode);
+      const res = await api.uploadJob(file, prompt, model, mode, videoLanguage, reportLanguage);
       navigate(`/jobs/${res.job_id}`);
     } catch (err: any) {
       setError(err.message || 'Error uploading video');
@@ -85,7 +95,7 @@ export const UploadPage: React.FC = () => {
           AI Video Quality <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">Auditor</span>
         </h1>
         <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-          Upload your video for exhaustive, frame-accurate multimodal AI analysis powered by Google Gemini 3.1 Pro & Whisper verification.
+          Upload your video for exhaustive, frame-accurate multimodal AI analysis powered by Google Gemini AI.
         </p>
       </div>
 
@@ -121,6 +131,48 @@ export const UploadPage: React.FC = () => {
               </div>
             )}
           </label>
+        </div>
+
+        {/* Language Selection Panel */}
+        <div className="glass-panel p-6 rounded-2xl border border-slate-800">
+          <label className="block text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <Globe className="w-4 h-4 text-indigo-400" />
+            Language Configurations
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                Video Audio Language
+              </label>
+              <select
+                value={videoLanguage}
+                onChange={(e) => setVideoLanguage(e.target.value)}
+                className="w-full bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors text-sm"
+              >
+                {LANGUAGES.map((lang) => (
+                  <option key={`video-${lang.code}`} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                Audit Report Language
+              </label>
+              <select
+                value={reportLanguage}
+                onChange={(e) => setReportLanguage(e.target.value)}
+                className="w-full bg-slate-900/80 border border-slate-700/80 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors text-sm"
+              >
+                {LANGUAGES.map((lang) => (
+                  <option key={`report-${lang.code}`} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Custom Requirements Prompt */}
@@ -160,7 +212,7 @@ export const UploadPage: React.FC = () => {
                   <div className="flex justify-between items-start mb-2">
                     <span className="font-bold text-slate-100">{info.name}</span>
                     <span className={`text-[10px] uppercase font-mono px-2 py-0.5 rounded-full ${
-                      mKey === 'gemini-3.1-pro' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-slate-800 text-slate-300'
+                      mKey === 'gemini-3.5-flash' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-slate-800 text-slate-300'
                     }`}>
                       {info.badge}
                     </span>

@@ -18,7 +18,7 @@ export const Header: React.FC = () => {
             <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
               VideoChecker<span className="text-indigo-400 font-extrabold ml-1">AI</span>
             </span>
-            <span className="block text-[10px] uppercase tracking-wider font-mono text-slate-400">Gemini 3.1 Auditor</span>
+            <span className="block text-[10px] uppercase tracking-wider font-mono text-slate-400">Multimodal Auditor</span>
           </div>
         </Link>
 

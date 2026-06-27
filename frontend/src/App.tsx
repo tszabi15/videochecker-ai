@@ -20,7 +20,7 @@ export const App: React.FC = () => {
           </Routes>
         </main>
         <footer className="border-t border-slate-800/80 py-6 text-center text-xs font-mono text-slate-500 glass-panel">
-          <p>VideoChecker AI Auditor • Powered by Gemini 3.1 Pro Preview & Whisper large-v3</p>
+          <p>VideoChecker AI Auditor • Powered by Gemini Multimodal AI Engine</p>
         </footer>
       </div>
     </Router>

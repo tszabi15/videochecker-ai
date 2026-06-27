@@ -3,12 +3,14 @@ import { JobListItem, JobStatusResponse, ModelType, ModeType, CostStatsResponse,
 const API_BASE = '/api/v1';
 
 export const api = {
-  async uploadJob(file: File, prompt: string, model: ModelType, mode: ModeType) {
+  async uploadJob(file: File, prompt: string, model: ModelType, mode: ModeType, videoLanguage: string = 'hu', reportLanguage: string = 'hu') {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('prompt', prompt);
     formData.append('model', model);
     formData.append('mode', mode);
+    formData.append('video_language', videoLanguage);
+    formData.append('report_language', reportLanguage);
 
     const res = await fetch(`${API_BASE}/jobs`, {
       method: 'POST',

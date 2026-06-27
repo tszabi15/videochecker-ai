@@ -11,7 +11,7 @@ def calculate_gemini_cost(
     Calculates USD cost for Gemini model call based on exact token usage.
     Returns (cost_usd, long_context_applied).
     """
-    config = MODEL_CONFIG.get(model_name, MODEL_CONFIG["gemini-3.1-pro"])
+    config = MODEL_CONFIG.get(model_name, MODEL_CONFIG["gemini-3.5-flash"])
     
     long_context = input_tokens > 200_000
     

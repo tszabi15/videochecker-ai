@@ -4,8 +4,8 @@ from pydantic import BaseModel
 from enum import Enum
 
 class ModelEnum(str, Enum):
-    GEMINI_3_1_PRO = "gemini-3.1-pro"
     GEMINI_3_5_FLASH = "gemini-3.5-flash"
+    GEMINI_3_1_PRO = "gemini-3.1-pro"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
 
 class ModeEnum(str, Enum):
@@ -20,6 +20,21 @@ class JobStatusEnum(str, Enum):
     DONE = "DONE"
     FAILED = "FAILED"
 
+class JobCreate(BaseModel):
+    prompt: Optional[str] = ""
+    model_used: Optional[str] = "HEAVY_ANALYZER"
+    mode: Optional[str] = "realtime"
+    video_language: Optional[str] = "hu"
+    report_language: Optional[str] = "hu"
+
+class JobInDB(JobCreate):
+    id: str
+    status: JobStatusEnum
+    original_filename: str
+    gcs_path: str
+    created_at: datetime
+    updated_at: datetime
+
 class JobCreateResponse(BaseModel):
     job_id: str
     status: JobStatusEnum
@@ -31,6 +46,8 @@ class JobStatusResponse(BaseModel):
     original_filename: str
     model_used: str
     mode: str
+    video_language: Optional[str] = "hu"
+    report_language: Optional[str] = "hu"
     created_at: datetime
     updated_at: datetime
     error_message: Optional[str] = None

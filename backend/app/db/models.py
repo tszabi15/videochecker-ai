@@ -16,8 +16,10 @@ class Job(Base):
     resolution = Column(String(50), nullable=True, default="1920x1080")
     fps = Column(Float, nullable=True, default=30.0)
     prompt = Column(Text, nullable=True, default="")
-    model_used = Column(String(50), nullable=False, default="gemini-3.1-pro")
+    model_used = Column(String(50), nullable=False, default="gemini-3.5-flash")
     mode = Column(String(20), nullable=False, default="realtime")  # realtime or batch
+    video_language = Column(String(10), nullable=True, default="hu")
+    report_language = Column(String(10), nullable=True, default="hu")
     
     # Cost tracking fields
     estimated_cost_usd = Column(Float, nullable=False, default=0.0)

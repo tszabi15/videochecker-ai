@@ -218,7 +218,7 @@ export const ReportPage: React.FC = () => {
                 ))}
               </select>
 
-              {/* Whisper Confirmed Toggle */}
+              {/* Audio Verified Toggle */}
               <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
                 <input
                   type="checkbox"
@@ -226,7 +226,7 @@ export const ReportPage: React.FC = () => {
                   onChange={(e) => setWhisperOnly(e.target.checked)}
                   className="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0"
                 />
-                <span>Whisper Confirmed</span>
+                <span>Audio Verified</span>
               </label>
             </div>
           </div>
@@ -254,7 +254,7 @@ export const ReportPage: React.FC = () => {
                   <div className="flex items-center gap-3">
                     {issue.whisper_confirmed && (
                       <span className="text-[11px] font-medium text-emerald-400 flex items-center gap-1 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/30">
-                        <Volume2 className="w-3 h-3" /> Whisper Confirmed
+                        <Volume2 className="w-3 h-3" /> Audio Verified
                       </span>
                     )}
                     <div className="text-right">
