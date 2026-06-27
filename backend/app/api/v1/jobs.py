@@ -132,7 +132,9 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
         error_message=job.error_message,
         estimated_cost_usd=job.estimated_cost_usd,
         actual_cost_usd=job.actual_cost_usd,
-        duration_seconds=job.duration_seconds
+        duration_seconds=job.duration_seconds,
+        is_quota_limited=job.is_quota_limited or False,
+        retry_after_seconds=job.retry_after_seconds or 0.0
     )
 
 @router.get("/{job_id}/report", response_model=ReportResponse)

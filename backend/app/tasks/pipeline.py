@@ -10,7 +10,7 @@ from app.db.session import SessionLocal
 from app.db.models import Job, JobReport
 from app.services.gcs import gcs_service
 from app.services.ffmpeg import ffmpeg_service
-from app.services.whisper import whisper_service
+from app.services.whisper import whisper_service, transcribe_with_groq
 from app.services.gemini import gemini_service
 from app.services.cost import calculate_gemini_cost, estimate_job_cost
 from app.config import settings
@@ -88,7 +88,8 @@ def transcribe(self, job_id: str) -> str:
         work_dir = os.path.join(settings.TEMP_DIR, job_id)
         audio_wav = os.path.join(work_dir, "audio.wav")
 
-        transcript = whisper_service.transcribe(audio_wav)
+        segments = transcribe_with_groq(audio_wav)
+        transcript = {"segments": segments}
         job.whisper_minutes = round((job.duration_seconds or 0.0) / 60.0, 2)
         db.commit()
 
@@ -135,6 +136,30 @@ def analyze(self, job_id: str) -> str:
             "size_mb": job.file_size_mb
         }
 
+        def on_quota_limit(sleep_time: float):
+            try:
+                db_q = SessionLocal()
+                j = db_q.query(Job).filter(Job.id == job_id).first()
+                if j:
+                    j.is_quota_limited = True
+                    j.retry_after_seconds = round(sleep_time, 1)
+                    db_q.commit()
+                db_q.close()
+            except Exception as ex:
+                print(f"Failed to set quota status: {ex}")
+
+        def on_quota_cleared():
+            try:
+                db_q = SessionLocal()
+                j = db_q.query(Job).filter(Job.id == job_id).first()
+                if j:
+                    j.is_quota_limited = False
+                    j.retry_after_seconds = 0.0
+                    db_q.commit()
+                db_q.close()
+            except Exception as ex:
+                print(f"Failed to clear quota status: {ex}")
+
         report_json, in_tokens, out_tokens = gemini_service.analyze_video(
             video_path=local_video_path,
             video_metadata=metadata,
@@ -143,7 +168,9 @@ def analyze(self, job_id: str) -> str:
             model_alias=job.model_used,
             mode=job.mode,
             video_language=job.video_language or "hu",
-            report_language=job.report_language or "hu"
+            report_language=job.report_language or "hu",
+            on_quota_limit=on_quota_limit,
+            on_quota_cleared=on_quota_cleared
         )
 
         cost_usd, long_ctx = calculate_gemini_cost(
@@ -157,6 +184,8 @@ def analyze(self, job_id: str) -> str:
         job.output_tokens = out_tokens
         job.actual_cost_usd = cost_usd
         job.long_context_applied = long_ctx
+        job.is_quota_limited = False
+        job.retry_after_seconds = 0.0
         db.commit()
 
         with open(os.path.join(work_dir, "raw_report.json"), "w") as f:
@@ -179,6 +208,9 @@ def validate(self, job_id: str) -> str:
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
             raise ValueError(f"Job {job_id} not found.")
+
+        job.status = "VALIDATING"
+        db.commit()
 
         work_dir = os.path.join(settings.TEMP_DIR, job_id)
         raw_report_path = os.path.join(work_dir, "raw_report.json")
@@ -206,6 +238,30 @@ def validate(self, job_id: str) -> str:
             if not os.path.exists(local_video_path):
                 local_video_path = os.path.join(work_dir, "normalized.mp4")
 
+            def on_quota_limit(sleep_time: float):
+                try:
+                    db_q = SessionLocal()
+                    j = db_q.query(Job).filter(Job.id == job_id).first()
+                    if j:
+                        j.is_quota_limited = True
+                        j.retry_after_seconds = round(sleep_time, 1)
+                        db_q.commit()
+                    db_q.close()
+                except Exception as ex:
+                    print(f"Failed to set quota status in validate: {ex}")
+
+            def on_quota_cleared():
+                try:
+                    db_q = SessionLocal()
+                    j = db_q.query(Job).filter(Job.id == job_id).first()
+                    if j:
+                        j.is_quota_limited = False
+                        j.retry_after_seconds = 0.0
+                        db_q.commit()
+                    db_q.close()
+                except Exception as ex:
+                    print(f"Failed to clear quota status in validate: {ex}")
+
             # 2. Re-verification call for CRITICAL issues concurrently via ThreadPoolExecutor
             def verify_single_critical_issue(issue: Dict[str, Any]):
                 try:
@@ -216,7 +272,9 @@ def validate(self, job_id: str) -> str:
                         model_alias=model_used,
                         video_path=local_video_path if os.path.exists(local_video_path) else None,
                         video_language=video_lang,
-                        report_language=report_lang
+                        report_language=report_lang,
+                        on_quota_limit=on_quota_limit,
+                        on_quota_cleared=on_quota_cleared
                     )
                     if not verification.get("confirmed", True):
                         issue["severity"] = "MAJOR"
@@ -230,6 +288,10 @@ def validate(self, job_id: str) -> str:
 
             with open(os.path.join(work_dir, "validated_report.json"), "w") as f:
                 json.dump(report_data, f)
+
+        job.is_quota_limited = False
+        job.retry_after_seconds = 0.0
+        db.commit()
 
         return job_id
     except Exception as e:
@@ -245,6 +307,9 @@ def finalize(self, job_id: str) -> str:
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
             raise ValueError(f"Job {job_id} not found.")
+
+        job.status = "FINALIZING"
+        db.commit()
 
         work_dir = os.path.join(settings.TEMP_DIR, job_id)
         val_report_path = os.path.join(work_dir, "validated_report.json")

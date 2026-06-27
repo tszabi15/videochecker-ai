@@ -30,6 +30,9 @@ class Job(Base):
     long_context_applied = Column(Boolean, nullable=True, default=False)
     md5_hash = Column(String(32), nullable=True)
     
+    is_quota_limited = Column(Boolean, nullable=True, default=False)
+    retry_after_seconds = Column(Float, nullable=True, default=0.0)
+
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

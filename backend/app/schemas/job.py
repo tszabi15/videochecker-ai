@@ -17,6 +17,8 @@ class JobStatusEnum(str, Enum):
     PREPROCESSING = "PREPROCESSING"
     TRANSCRIBING = "TRANSCRIBING"
     ANALYZING = "ANALYZING"
+    VALIDATING = "VALIDATING"
+    FINALIZING = "FINALIZING"
     DONE = "DONE"
     FAILED = "FAILED"
 
@@ -54,6 +56,8 @@ class JobStatusResponse(BaseModel):
     estimated_cost_usd: float
     actual_cost_usd: Optional[float] = 0.0
     duration_seconds: Optional[float] = 0.0
+    is_quota_limited: Optional[bool] = False
+    retry_after_seconds: Optional[float] = 0.0
 
 class JobListItem(BaseModel):
     id: str

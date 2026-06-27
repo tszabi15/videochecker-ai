@@ -2,6 +2,7 @@ import os
 import json
 import time
 import random
+import re
 import uuid
 from typing import Dict, Any, Tuple, Optional
 from google import genai
@@ -110,6 +111,33 @@ class GeminiService:
         else:
             self.client = None
 
+    def _calculate_retry_delay(
+        self,
+        exception: Exception,
+        attempt: int,
+        on_quota_limit: Optional[Any] = None
+    ) -> float:
+        err_str = str(exception)
+        if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+            match = re.search(r"Please retry in (\d+(?:\.\d+)?)s", err_str, re.IGNORECASE)
+            if match:
+                parsed_seconds = float(match.group(1))
+                sleep_time = parsed_seconds + 3.0
+                print(f"[Gemini] Rate limit hit (429/Quota). Extracted retry delay: {parsed_seconds}s. Sleeping for {sleep_time:.2f}s...")
+                if on_quota_limit:
+                    try:
+                        on_quota_limit(sleep_time)
+                    except Exception as cb_err:
+                        print(f"[Gemini] Quota limit callback error: {cb_err}")
+                return sleep_time
+            else:
+                if on_quota_limit:
+                    try:
+                        on_quota_limit(60.0)
+                    except Exception as cb_err:
+                        print(f"[Gemini] Quota limit callback error: {cb_err}")
+        return (2 ** (attempt + 1)) + random.uniform(1.0, 3.0)
+
     def analyze_video(
         self,
         video_path: str,
@@ -119,7 +147,9 @@ class GeminiService:
         model_alias: str = "HEAVY_ANALYZER",
         mode: str = "realtime",
         video_language: str = "hu",
-        report_language: str = "hu"
+        report_language: str = "hu",
+        on_quota_limit: Optional[Any] = None,
+        on_quota_cleared: Optional[Any] = None
     ) -> Tuple[Dict[str, Any], int, int]:
         """
         Uploads video to Gemini File API, executes structured JSON analysis with retries using GenAI client.models.generate_content.
@@ -180,6 +210,11 @@ LANGUAGE ENFORCEMENT RULES:
                         response_schema=IssueReport
                     )
                 )
+                if on_quota_cleared:
+                    try:
+                        on_quota_cleared()
+                    except Exception:
+                        pass
                 response_text = response.text
                 parsed_json = json.loads(response_text)
                 normalized_report = self._normalize_report(parsed_json, video_metadata, model_alias)
@@ -198,7 +233,7 @@ LANGUAGE ENFORCEMENT RULES:
             except Exception as e:
                 last_exception = e
                 print(f"[Gemini] Attempt {attempt+1} failed: {e}. Retrying...")
-                sleep_time = (2 ** (attempt + 1)) + random.uniform(1.0, 3.0)
+                sleep_time = self._calculate_retry_delay(e, attempt, on_quota_limit=on_quota_limit)
                 time.sleep(sleep_time)
 
         if gfile:
@@ -218,7 +253,9 @@ LANGUAGE ENFORCEMENT RULES:
         model_alias: str = "FAST_VERIFIER",
         video_path: Optional[str] = None,
         video_language: str = "hu",
-        report_language: str = "hu"
+        report_language: str = "hu",
+        on_quota_limit: Optional[Any] = None,
+        on_quota_cleared: Optional[Any] = None
     ) -> Dict[str, Any]:
         """Runs second Gemini verification call for CRITICAL issues with video context using GenAI Models API."""
         if not (self.client and settings.GEMINI_API_KEY):
@@ -252,11 +289,16 @@ LANGUAGE ENFORCEMENT RULES:
                             response_mime_type="application/json"
                         )
                     )
+                    if on_quota_cleared:
+                        try:
+                            on_quota_cleared()
+                        except Exception:
+                            pass
                     response_text = response.text
                     return json.loads(response_text)
                 except Exception as e:
                     print(f"[Gemini Verification] Attempt {attempt+1} failed due to network unavailability. Retrying...")
-                    sleep_time = (2 ** (attempt + 1)) + random.uniform(1.0, 3.0)
+                    sleep_time = self._calculate_retry_delay(e, attempt, on_quota_limit=on_quota_limit)
                     time.sleep(sleep_time)
 
             return {"confirmed": True, "confidence": 0.90, "evidence": "Confirmed via fallback verification logic."}

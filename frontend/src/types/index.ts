@@ -1,6 +1,6 @@
 export type ModelType = 'gemini-3.1-pro' | 'gemini-3.5-flash' | 'gemini-2.5-flash';
 export type ModeType = 'realtime' | 'batch';
-export type JobStatus = 'QUEUED' | 'PREPROCESSING' | 'TRANSCRIBING' | 'ANALYZING' | 'DONE' | 'FAILED';
+export type JobStatus = 'QUEUED' | 'PREPROCESSING' | 'TRANSCRIBING' | 'ANALYZING' | 'VALIDATING' | 'FINALIZING' | 'DONE' | 'FAILED';
 export type SeverityType = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
 
 export interface IssueItem {
@@ -54,6 +54,8 @@ export interface JobStatusResponse {
   estimated_cost_usd: number;
   actual_cost_usd?: number;
   duration_seconds?: number;
+  is_quota_limited?: boolean;
+  retry_after_seconds?: number;
 }
 
 export interface JobListItem {
