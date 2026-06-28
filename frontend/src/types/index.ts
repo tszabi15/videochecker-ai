@@ -1,13 +1,18 @@
+/**
+ * Frontend TypeScript type definitions for VideoChecker AI.
+ */
+
 export type ModelType = 'gemini-3.1-pro' | 'gemini-3.5-flash' | 'gemini-2.5-flash';
 export type ModeType = 'realtime' | 'batch';
 export type JobStatus = 'QUEUED' | 'PREPROCESSING' | 'TRANSCRIBING' | 'ANALYZING' | 'VALIDATING' | 'FINALIZING' | 'DONE' | 'FAILED';
 export type SeverityType = 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
+export type CategoryType = 'TECHNICAL_ERROR' | 'CONTENT_ERROR' | 'AUDIO_VISUAL_ERROR' | 'GENERAL_OBSERVATION';
 
 export interface IssueItem {
   id: string;
   timestamp_start: number;
   timestamp_end: number;
-  category: string;
+  category: CategoryType;
   severity: SeverityType;
   title: string;
   description: string;
@@ -77,4 +82,30 @@ export interface CostStatsResponse {
   total_output_tokens: number;
   total_whisper_minutes: number;
   spend_by_model: Record<string, number>;
+}
+
+/** Response from the report endpoint */
+export interface ReportResponse {
+  json_report: IssueReport;
+  markdown_report: string;
+}
+
+/** Response from the upload/create job endpoint */
+export interface UploadJobResponse {
+  job_id: string;
+  status: string;
+  estimated_cost_usd: number;
+}
+
+/** Structured API error for user-facing display */
+export class ApiError extends Error {
+  public readonly statusCode: number;
+  public readonly detail: string;
+
+  constructor(statusCode: number, detail: string) {
+    super(detail);
+    this.name = 'ApiError';
+    this.statusCode = statusCode;
+    this.detail = detail;
+  }
 }

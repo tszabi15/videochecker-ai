@@ -9,37 +9,17 @@ class SeverityEnum(str, Enum):
     INFO = "INFO"
 
 class CategoryEnum(str, Enum):
-    AUDIO_QUALITY = "AUDIO_QUALITY"
-    AUDIO_SYNC = "AUDIO_SYNC"
-    SPEECH_COHERENCE = "SPEECH_COHERENCE"
-    BACKGROUND_NOISE = "BACKGROUND_NOISE"
-    VISUAL_QUALITY = "VISUAL_QUALITY"
-    RESOLUTION = "RESOLUTION"
-    LIP_SYNC = "LIP_SYNC"
-    SCREEN_CLUTTER = "SCREEN_CLUTTER"
-    CONTENT_STRUCTURE = "CONTENT_STRUCTURE"
-    MISSING_INTRODUCTION = "MISSING_INTRODUCTION"
-    MISSING_SUMMARY = "MISSING_SUMMARY"
-    CONTENT_ACCURACY = "CONTENT_ACCURACY"
-    MISSING_WHY_EXPLANATION = "MISSING_WHY_EXPLANATION"
-    TERMINOLOGY_INCONSISTENCY = "TERMINOLOGY_INCONSISTENCY"
-    CODE_ERROR = "CODE_ERROR"
-    COPY_PASTE_VIOLATION = "COPY_PASTE_VIOLATION"
-    NAMING_CONVENTION = "NAMING_CONVENTION"
-    PACING = "PACING"
-    FILLER_WORDS = "FILLER_WORDS"
-    MISSING_TIMESTAMPS = "MISSING_TIMESTAMPS"
-    SENSITIVE_DATA_EXPOSURE = "SENSITIVE_DATA_EXPOSURE"
-    MISSING_VERSION_INFO = "MISSING_VERSION_INFO"
-    MISSING_QUIZ = "MISSING_QUIZ"
-    METADATA = "METADATA"
+    TECHNICAL_ERROR = "TECHNICAL_ERROR"
+    CONTENT_ERROR = "CONTENT_ERROR"
+    AUDIO_VISUAL_ERROR = "AUDIO_VISUAL_ERROR"
+    GENERAL_OBSERVATION = "GENERAL_OBSERVATION"
 
 class IssueItem(BaseModel):
     id: str = Field(..., description="UUID of the issue")
     timestamp_start: float = Field(..., description="Start timestamp in seconds")
     timestamp_end: float = Field(..., description="End timestamp in seconds")
-    category: str = Field(..., description="Issue category")
-    severity: str = Field(..., description="Severity rating: CRITICAL, MAJOR, MINOR, INFO")
+    category: CategoryEnum = Field(..., description="Issue category: TECHNICAL_ERROR, CONTENT_ERROR, AUDIO_VISUAL_ERROR, GENERAL_OBSERVATION")
+    severity: SeverityEnum = Field(..., description="Severity rating: CRITICAL, MAJOR, MINOR, INFO")
     title: str = Field(..., description="Short title, max 10 words")
     description: str = Field(..., description="Detailed description of the issue")
     evidence: str = Field(..., description="Direct verbatim quote or precise visual frame description")

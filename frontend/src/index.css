@@ -6,44 +6,45 @@
   :root {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 6.9%;
+    --card: 222.2 84% 4.9%;
     --border: 217.2 32.6% 17.5%;
+  }
+
+  body {
+    @apply bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white min-h-screen;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%);
+    background-attachment: fixed;
   }
 }
 
-body {
-  font-family: 'Inter', sans-serif;
-  background-color: #030712;
-  color: #f9fafb;
-}
-
-code, pre {
-  font-family: 'JetBrains Mono', monospace;
-}
-
-/* Custom glassmorphism cards */
 .glass-panel {
-  background: rgba(17, 24, 39, 0.7);
+  background: rgba(15, 23, 42, 0.75);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-panel-hover {
-  transition: all 0.3s ease;
+  transition: all 0.2s ease-in-out;
 }
 .glass-panel-hover:hover {
-  background: rgba(31, 41, 55, 0.8);
-  border-color: rgba(99, 102, 241, 0.3);
-  transform: translateY(-2px);
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(99, 102, 241, 0.4);
 }
 
-/* Shimmer animation for loading states */
-@keyframes pulseGlow {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.02); }
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-
-.animate-pulse-glow {
-  animation: pulseGlow 3s infinite ease-in-out;
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.8);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.6);
 }
